@@ -14,7 +14,9 @@ const cookieParser = require('cookie-parser');
 const allowedOrigins = [
   'https://baba-merchant-store.onrender.com',
   'http://localhost:3001',
+  'http://localhost:8080',
   'http://10.0.2.2:3001',
+  'http://10.0.2.2:8080'
 ];
 
 app.use(cookieParser()); // if not already present
