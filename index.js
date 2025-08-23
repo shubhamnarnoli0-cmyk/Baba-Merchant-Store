@@ -11,12 +11,27 @@ const path = require('path');
 
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const allowedOrigins = [
+  'https://baba-merchant-store.onrender.com',
+  'http://localhost:3001',
+  'http://10.0.2.2:3001',
+];
 
 app.use(cookieParser()); // if not already present
 
 
+
+
 app.use(cors({
-  origin: ['https://baba-merchant-store.onrender.com', 'http://localhost:3001', 'http://10.0.2.2:3001'],  // reflect request origin (even "null")
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy: This origin is not allowed'));
+    }
+  },
   credentials: true
 }));
 
