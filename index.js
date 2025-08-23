@@ -16,7 +16,7 @@ app.use(cookieParser()); // if not already present
 
 
 app.use(cors({
-  origin: true,  // reflect request origin (even "null")
+  origin: ['https://baba-merchant-store.onrender.com', 'http://localhost:3001', 'http://10.0.2.2:3001'],  // reflect request origin (even "null")
   credentials: true
 }));
 
@@ -940,9 +940,9 @@ app.post('/api/salesperson/login', async (req, res) => {
 
     // httpOnly cookie so the dashboard can make authenticated calls without storing token in JS
     res.cookie('sp_jwt', token, {
-      httpOnly: false,
+      httpOnly: true,
       sameSite: 'None',
-      secure: false,          // set true when you serve over HTTPS
+      secure: true,          // set true when you serve over HTTPS
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
