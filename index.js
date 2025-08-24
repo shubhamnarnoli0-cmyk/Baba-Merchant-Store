@@ -1306,7 +1306,7 @@ app.post('/api/admin/retailers', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
       `INSERT INTO customers (name, phone, email, password, region, salesperson_id, customer_id, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
        RETURNING *`,
       [name, phone, email, hashedPassword, region, salesperson_id, customer_id || null]
     );
