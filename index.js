@@ -333,7 +333,6 @@ app.patch("/api/admin/orders/:orderId/items/:productId", async (req, res) => {
   }
 });
 
-
 app.get('/api/admin/products', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -342,7 +341,7 @@ app.get('/api/admin/products', async (req, res) => {
         p.name, 
         p.base_price,
 	p.min_retail_price, 
-        p.image_url, p.hsn, p.cgst, p.sgst,
+        p.image_url, p.hsn, p.cgst, p.sgst, p.cess,
         c.name AS company_name
       FROM products p
       JOIN companies c ON p.company_id = c.id
@@ -373,7 +372,8 @@ SELECT
   c.name AS company_name,
   p.hsn,
   p.cgst,
-  p.sgst
+  p.sgst,
+  p.cess
 FROM products p
 JOIN companies c ON p.company_id = c.id
 WHERE p.id = $1
@@ -392,7 +392,7 @@ WHERE p.id = $1
 
 
 app.post('/api/admin/products', async (req, res) => {
-  const { name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst } = req.body;
+  const { name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst, cess } = req.body;
 
   // Validate input
   if (!name || !base_price || !company_id || !hsn || !cgst || !sgst) {
@@ -401,9 +401,9 @@ app.post('/api/admin/products', async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO products (name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst]
+      `INSERT INTO products (name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst, cess)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst, cess]
     );
 
     res.json({ message: 'Product added successfully' });
@@ -415,7 +415,7 @@ app.post('/api/admin/products', async (req, res) => {
 
 app.put('/api/admin/products/:id', async (req, res) => {
   const productId = parseInt(req.params.id);
-  const { name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst } = req.body;
+  const { name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst, cess } = req.body;
 
   console.log("Incoming PUT /api/admin/products/", productId, req.body); // ✅ Add this
 
@@ -425,8 +425,8 @@ app.put('/api/admin/products/:id', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `UPDATE products SET name = $1, image_url = $2, company_id = $3, base_price = $4, min_retail_price = $5, hsn = $6, cgst = $7, sgst = $8 WHERE id = $9`,
-      [name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst, productId]
+      `UPDATE products SET name = $1, image_url = $2, company_id = $3, base_price = $4, min_retail_price = $5, hsn = $6, cgst = $7, sgst = $8, cess=$9 WHERE id = $10`,
+      [name, image_url, company_id, base_price, min_retail_price, hsn, cgst, sgst, cess, productId]
     );
 
     console.log("Rows affected:", result.rowCount); // ✅ Log this too
@@ -469,8 +469,8 @@ const insertPromises = products.map(product => {
   console.log(`Inserting product: ${product.name}, company_id: ${company_id}`);
 
   return pool.query(
-    `INSERT INTO products (name, price, base_price, image_url, company_id, is_active, min_retail_price, hsn, cgst, sgst) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9)`,
-    [product.name, product.price, product.base_price, product.image_url, company_id, product.min_retail_price, product.hsn, product.cgst, product.sgst]
+    `INSERT INTO products (name, price, base_price, image_url, company_id, is_active, min_retail_price, hsn, cgst, sgst, cess) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9, $10)`,
+    [product.name, product.price, product.base_price, product.image_url, company_id, product.min_retail_price, product.hsn, product.cgst, product.sgst, product.cess]
   );
 }).filter(Boolean); // Remove skipped entries
 
@@ -797,7 +797,7 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     // Fetch order + items + product details (include HSN, CGST, SGST)
     const orderQuery = `
       SELECT o.id AS order_id, o.customer_id, c.name AS customer_name, o.created_at,
-             oi.id AS order_item_id, p.name AS product_name, p.hsn, p.cgst, p.sgst,
+             oi.id AS order_item_id, p.name AS product_name, p.hsn, p.cgst, p.sgst, p.cess,
              oi.quantity, oi.negotiated_price
       FROM orders o
       JOIN customers c ON o.customer_id = c.customer_id
@@ -817,13 +817,14 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
       created_at: rows[0].created_at,
       items: rows.map(item => {
         const finalPrice = parseFloat(item.negotiated_price) * item.quantity;
-        const taxableAmt = finalPrice / (1 + (parseFloat(item.cgst) + parseFloat(item.sgst)) / 100);
+        const taxableAmt = finalPrice / (1 + (parseFloat(item.cgst) + parseFloat(item.sgst) + parseFloat(item.cess)) / 100);
         return {
           product_name: item.product_name,
           hsn: item.hsn,
           quantity: item.quantity,
           cgst: parseFloat(item.cgst),
           sgst: parseFloat(item.sgst),
+          cess: parseFloat(item.cess),
           taxable_amt: taxableAmt,
           final_price: finalPrice
         };
@@ -831,7 +832,9 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     };
 
     // PDF
-    const doc = new PDFDocument({ margin: 50 });
+    const doc = new PDFDocument({
+  margins: { top: 50, left: 20, right: 20, bottom: 50 }
+});
     res.setHeader('Content-Disposition', `attachment; filename=invoice_order_${orderId}.pdf`);
     res.setHeader('Content-Type', 'application/pdf');
     doc.pipe(res);
@@ -839,9 +842,9 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     // Header
     doc.fontSize(20).text("Baba Merchant Store", { align: 'center' });
     doc.moveDown();
-    doc.fontSize(12).text("Tiloi, District - Raebareli");
+    doc.fontSize(12).text("Tiloi, District - Amethi");
     doc.text("GSTIN: 09ARTPA0714F1Z0");
-    doc.text("Phone: +91-9839645091");
+    doc.text("Phone: +91-9839645091, +91-7081156224");
     doc.text("Email: bms@gmail.com");
     doc.moveDown();
 
@@ -859,48 +862,61 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     doc.moveDown();
 
     // Table Header
-    const tableTop = doc.y;
-    const colWidths = [150, 60, 50, 90, 50, 50, 100]; 
-    // Product | HSN | Qty | Taxable Amt | CGST | SGST | Final Price
-    doc.fontSize(11).font('Helvetica-Bold');
-    doc.text('Product', 50, tableTop, { width: colWidths[0], underline: true });
-    doc.text('HSN', 200, tableTop, { width: colWidths[1], underline: true });
-    doc.text('Qty', 260, tableTop, { width: colWidths[2], underline: true, align: 'right' });
-    doc.text('Taxable Amt', 310, tableTop, { width: colWidths[3], underline: true, align: 'right' });
-    doc.text('CGST %', 400, tableTop, { width: colWidths[4], underline: true, align: 'right' });
-    doc.text('SGST %', 450, tableTop, { width: colWidths[5], underline: true, align: 'right' });
-    doc.text('Final Price', 500, tableTop, { width: colWidths[6], underline: true, align: 'right' });
+    const colWidths = [150, 60, 40, 80, 50, 50, 50, 80]; 
+    // Product | HSN | Qty | Taxable Amt | CGST | SGST | Cess |Final Price
+const startX = 20;
+let x = startX;
+const tableTop = doc.y + 5;
+doc.fontSize(11).font('Helvetica-Bold');
+[
+  'Product', 'HSN', 'Qty', 'Taxable Amt', 'CGST %', 'SGST %', 'Cess %', 'Final Price'
+].forEach((header, i) => {
+  doc.text(header, x, tableTop, { width: colWidths[i], underline: true, align: (i > 1 ? 'right' : 'left') });
+  x += colWidths[i];
+});
 
-    // Table Rows
-    let y = tableTop + 20;
-    let grandTotal = 0;
-    doc.font('Helvetica').fontSize(11);
+  let y = tableTop + 20;
+let grandTotal = 0;
+doc.font('Helvetica').fontSize(10);
 
-    order.items.forEach((item, index) => {
-      grandTotal += item.final_price;
-      const rowHeight = 25;
+order.items.forEach((item, index) => {
+  grandTotal += item.final_price;
+  const rowHeight = 20;
 
-      if (index % 2 === 0) {
-        doc.rect(50, y - 2, 550, rowHeight).fill('#f5f5f5').fillColor('black');
-      }
+  // Alternate row shading
+  if (index % 2 === 0) {
+    doc.rect(startX, y - 2, colWidths.reduce((a, b) => a + b, 0), rowHeight).fill('#f5f5f5').fillColor('black');
+  }
 
-      doc.text(item.product_name, 50, y, { width: colWidths[0] });
-      doc.text(item.hsn, 200, y, { width: colWidths[1] });
-      doc.text(item.quantity.toString(), 260, y, { width: colWidths[2], align: 'right' });
-      doc.text(item.taxable_amt.toFixed(2), 310, y, { width: colWidths[3], align: 'right' });
-      doc.text(item.cgst.toFixed(2), 400, y, { width: colWidths[4], align: 'right' });
-      doc.text(item.sgst.toFixed(2), 450, y, { width: colWidths[5], align: 'right' });
-      doc.text(item.final_price.toFixed(2), 500, y, { width: colWidths[6], align: 'right' });
-      
+  // Reset x for each row
+  x = startX;
+  const rowValues = [
+    item.product_name,
+    item.hsn,
+    item.quantity.toString(),
+    item.taxable_amt.toFixed(2),
+    item.cgst.toFixed(2),
+    item.sgst.toFixed(2),
+    item.cess.toFixed(2),
+    item.final_price.toFixed(2)
+  ];
 
-      doc.moveTo(50, y + rowHeight).lineTo(600, y + rowHeight).stroke();
-      y += rowHeight + 8;
-    });
+  rowValues.forEach((val, i) => {
+    doc.text(val, x, y, { width: colWidths[i], align: (i > 1 ? 'right' : 'left') });
+    x += colWidths[i];
+  });
 
-    // Grand Total
-    doc.moveTo(50, y + 5).lineTo(600, y + 5).stroke();
-    doc.font('Helvetica-Bold').text('Grand Total:', 400, y + 10, { width: 100, align: 'right' });
-    doc.text(grandTotal.toFixed(2), 500, y + 10, { width: 100, align: 'right' });
+  // Draw bottom line
+  doc.moveTo(startX, y + rowHeight).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + rowHeight).stroke();
+
+  y += rowHeight + 5;
+});
+
+// Grand Total
+doc.moveTo(startX, y + 5).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + 5).stroke();
+doc.font('Helvetica-Bold').text('Grand Total:', startX + 400, y + 10, { width: 100, align: 'right' });
+doc.text(grandTotal.toFixed(2), startX + 480, y + 10, { width: 80, align: 'right' });
+
 
     doc.end();
   } catch (err) {
@@ -908,6 +924,7 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     res.status(500).json({ error: "Failed to generate invoice" });
   }
 });
+
 
 function signSalespersonToken(sp) {
   // keep payload minimal
@@ -959,8 +976,8 @@ app.post('/api/salesperson/login', async (req, res) => {
     // httpOnly cookie so the dashboard can make authenticated calls without storing token in JS
     res.cookie('sp_jwt', token, {
       httpOnly: true,
-      sameSite: 'None',
-      secure: true,          // set true when you serve over HTTPS
+      sameSite: 'lax',
+      secure: false,          // set true when you serve over HTTPS
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
@@ -1012,7 +1029,7 @@ app.get('/api/salesperson/customers', authenticateSalesperson, async (req, res) 
   try {
     const salespersonId = req.user.sid; // from JWT
     const result = await pool.query(
-      `SELECT customer_id, name, phone
+      `SELECT customer_id, name, phone, region
        FROM customers
        WHERE salesperson_id = $1
        ORDER BY name ASC`,
@@ -1264,7 +1281,7 @@ app.get("/api/admin/salespersons", async (req, res) => {
 app.get('/api/admin/retailers', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT c.id, c.customer_id, c.name, c.phone, c.email, c.salesperson_id,
+      SELECT c.id, c.customer_id, c.name, c.phone, c.email,c.region, c.salesperson_id,
              CASE WHEN s.status = 'inactive' THEN 'Unassigned' ELSE s.name END AS salesperson_name
       FROM customers c
       LEFT JOIN salespersons s ON c.salesperson_id = s.id
@@ -1281,17 +1298,17 @@ app.get('/api/admin/retailers', async (req, res) => {
 // ✅ Add new retailer (customer)
 app.post('/api/admin/retailers', async (req, res) => {
   try {
-    const { name, phone, email, password, salesperson_id, customer_id } = req.body;
+    const { name, phone, email, password, region, salesperson_id, customer_id } = req.body;
 
     if (!name || !salesperson_id) {
       return res.status(400).json({ error: "Retailer name and salesperson_id are required" });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO customers (name, phone, email, password, salesperson_id, customer_id, created_at)
+      `INSERT INTO customers (name, phone, email, password, region, salesperson_id, customer_id, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, NOW())
        RETURNING *`,
-      [name, phone, email, hashedPassword, salesperson_id, customer_id || null]
+      [name, phone, email, hashedPassword, region, salesperson_id, customer_id || null]
     );
 
     res.json({
@@ -1307,13 +1324,13 @@ app.post('/api/admin/retailers', async (req, res) => {
 // Update retailers details
 app.put('/api/admin/retailers/:id', async (req, res) => {
   try {
-    const { name, phone, email, customer_id, salesperson_id } = req.body;
+    const { name, phone, email, region, customer_id, salesperson_id } = req.body;
     const result = await pool.query(
       `UPDATE customers
-       SET name = $1, phone = $2, email = $3, customer_id = $4, salesperson_id = $5
-       WHERE id = $6
+       SET name = $1, phone = $2, email = $3, region=$4, customer_id = $5, salesperson_id = $6
+       WHERE id = $7
        RETURNING *`,
-      [name, phone, email, customer_id, salesperson_id , req.params.id]
+      [name, phone, email, region, customer_id, salesperson_id , req.params.id]
     );
 
     if (result.rows.length === 0) {
