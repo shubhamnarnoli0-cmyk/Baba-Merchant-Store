@@ -838,14 +838,15 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=invoice_order_${orderId}.pdf`);
     res.setHeader('Content-Type', 'application/pdf');
     doc.pipe(res);
-
+    doc.rect(10, 10, doc.page.width - 40, doc.page.height - 40).stroke();
+    doc.image('images/logo-bms.jpeg', 20, 20, { width: 60 });
     // Header
     doc.fontSize(20).text("Baba Merchant Store", { align: 'center' });
     doc.moveDown();
     doc.fontSize(12).text("Tiloi, District - Amethi");
     doc.text("GSTIN: 09ARTPA0714F1Z0");
     doc.text("Phone: +91-9839645091, +91-7081156224");
-    doc.text("Email: bms@gmail.com");
+    doc.text("Email: bmstiloi2025@gmail.com");
     doc.moveDown();
 
     // Invoice Heading
