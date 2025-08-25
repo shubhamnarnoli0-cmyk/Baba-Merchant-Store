@@ -845,7 +845,7 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     doc.moveDown();
     doc.fontSize(12).text("Tiloi, District - Amethi");
     doc.text("GSTIN: 09ARTPA0714F1Z0");
-    doc.text("Phone: +91-9839645091, +91-7081156224");
+    doc.text("Phone: +91-800900802, +91-7081156224");
     doc.text("Email: bmstiloi2025@gmail.com");
     doc.moveDown();
 
