@@ -857,8 +857,8 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     doc.fontSize(12).text(`Order ID: ${order.order_id}`);
     doc.text(`Customer Name: ${order.customer_name}`);
     doc.text(`Customer ID: ${order.customer_id}`);
-    doc.text(`Order Date: ${new Date(order.created_at).toLocaleDateString()}`, { continued: true })
-       .text(`Invoice Date: ${new Date(invoiceDate).toLocaleDateString()}`, { align: 'right' });
+    doc.text(`Order Date: ${new Date(order.created_at).toLocaleDateString('en-GB')}`, { continued: true })
+       .text(`Invoice Date: ${new Date(invoiceDate).toLocaleDateString('en-GB')}`, { align: 'right' });
     doc.text(`Invoice No: ${invoiceNumber}`);
     doc.moveDown();
 
