@@ -796,7 +796,7 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
 
     // Fetch order + items + product details (include HSN, CGST, SGST)
     const orderQuery = `
-      SELECT o.id AS order_id, o.customer_id, c.name AS customer_name, o.created_at, c.region,
+      SELECT o.id AS order_id, o.customer_id, c.name AS customer_name, o.created_at, c.region,c.phone,
              oi.id AS order_item_id, p.name AS product_name, p.hsn, p.cgst, p.sgst, p.cess,
              oi.quantity, oi.negotiated_price
       FROM orders o
@@ -814,6 +814,7 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
       order_id: rows[0].order_id,
       customer_name: rows[0].customer_name,
       customer_region: rows[0].region,
+      customer_contact: rows[0].phone,
       customer_id: rows[0].customer_id,
       created_at: rows[0].created_at,
       items: rows.map(item => {
@@ -858,6 +859,7 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     doc.fontSize(12).text(`Order ID: ${order.order_id}`);
     doc.text(`Customer Name: ${order.customer_name}`);
     doc.text(`Area: ${order.customer_region}`);
+    doc.text(`Customer Contact: ${order.customer_contact}`);
     doc.text(`Customer ID: ${order.customer_id}`);
     doc.text(`Order Date: ${new Date(order.created_at).toLocaleDateString('en-GB')}`, { continued: true })
        .text(`Invoice Date: ${new Date(invoiceDate).toLocaleDateString('en-GB')}`, { align: 'right' });
