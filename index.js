@@ -637,7 +637,7 @@ app.get('/api/admin/sales-summary', async (req, res) => {
 
     // Total revenue (only fulfilled orders)
     const revenueRes = await client.query(`
-      SELECT SUM(oi.quantity * oi.unit_price) AS total_revenue
+      SELECT SUM(oi.quantity * oi.negotiated_price) AS total_revenue
       FROM orders o
       JOIN order_items oi ON o.id = oi.order_id
       WHERE o.status = 'Fulfilled'
