@@ -1578,10 +1578,10 @@ app.get('/api/admin/sales-summary/by-salesperson', async (req, res) => {
         sp.name AS salesperson_name,
         COUNT(DISTINCT o.id) AS total_orders,
         COUNT(DISTINCT o.customer_id) AS total_customers,
-        COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS total_sales,
+        COALESCE(SUM(oi.quantity * oi.negotiated_price), 0) AS total_sales,
         CASE 
           WHEN COUNT(DISTINCT o.id) = 0 THEN 0 
-          ELSE COALESCE(SUM(oi.quantity * oi.unit_price), 0)::float / COUNT(DISTINCT o.id) 
+          ELSE COALESCE(SUM(oi.quantity * oi.negotiated_price), 0)::float / COUNT(DISTINCT o.id) 
         END AS avg_sales_per_order
       FROM salespersons sp
       LEFT JOIN orders o ON o.salesperson_id = sp.id AND o.status = 'Fulfilled'
