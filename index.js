@@ -920,7 +920,11 @@ order.items.forEach((item, index) => {
 // Grand Total
 doc.moveTo(startX, y + 5).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + 5).stroke();
 doc.font('Helvetica-Bold').text('Grand Total:', startX + 400, y + 10, { width: 100, align: 'right' });
-doc.text(Math.round(grandTotal).toString(), startX + 480, y + 10, { width: 80, align: 'right' });
+const roundedTotal = Math.round(grandTotal); 
+// Format grand total in Indian currency
+const formattedGrandTotal = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2}).format(roundedTotal);
+
+doc.text(formattedGrandTotal, startX + 480, y + 10, { width: 80, align: 'right' });
 
 
     doc.end();
