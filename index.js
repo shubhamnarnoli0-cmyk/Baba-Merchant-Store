@@ -783,7 +783,7 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
 
       const orderDate = orderDateRes.rows[0].created_at;
       const datePart = new Date(orderDate).toISOString().slice(0, 10).replace(/-/g, "");
-      invoiceNumber = `INV-${orderId}-${datePart}-${seqNum}`;
+      invoiceNumber = `CHN-${orderId}-${datePart}-${seqNum}`;
       invoiceDate = new Date();
 
       // Step 3: Insert invoice
@@ -862,8 +862,8 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     doc.text(`Customer Contact: ${order.customer_contact}`);
     doc.text(`Customer ID: ${order.customer_id}`);
     doc.text(`Order Date: ${new Date(order.created_at).toLocaleDateString('en-GB')}`, { continued: true })
-       .text(`Invoice Date: ${new Date(invoiceDate).toLocaleDateString('en-GB')}`, { align: 'right' });
-    doc.text(`Invoice No: ${invoiceNumber}`);
+       .text(`Challan Date: ${new Date(invoiceDate).toLocaleDateString('en-GB')}`, { align: 'right' });
+    doc.text(`Challan No: ${invoiceNumber}`);
     doc.moveDown();
 
     // Table Header
