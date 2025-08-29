@@ -46,6 +46,9 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
 
+
+console.log("ExcelJS Workbook type:", typeof ExcelJS.Workbook);
+
 // GET /api/products
 app.get('/api/products', async (req, res) => {
 const { company_id } = req.query;
