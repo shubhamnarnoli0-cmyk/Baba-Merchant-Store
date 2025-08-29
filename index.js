@@ -1687,7 +1687,8 @@ app.post('/api/salesperson/customers/add', authenticateSalesperson, async (req, 
 app.post("/api/admin/export-orders", async (req, res) => {
   try {
     const { startDate, endDate, customers, status, format } = req.body;
-     
+     console.log("ExcelJS loaded version:", require('exceljs').version);
+
 
     let whereClauses = [];
     let params = [];
