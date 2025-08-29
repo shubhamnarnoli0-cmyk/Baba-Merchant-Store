@@ -257,9 +257,8 @@ if (start_date) {
 
 if (end_date) {
   values.push(end_date);
-  conditions.push(`o.created_at <= $${values.length}`);
+  conditions.push(`o.created_at <= ($${values.length}::date + interval '1 day')`);
 }
-
 
     if (conditions.length > 0) {
       query += " WHERE " + conditions.join(" AND ");
@@ -1684,6 +1683,135 @@ app.post('/api/salesperson/customers/add', authenticateSalesperson, async (req, 
     res.status(500).json({ error: 'Server error while adding retailer.' });
   }
 });
+
+app.post("/api/admin/export-orders", async (req, res) => {
+  try {
+    const { startDate, endDate, customers, status, format } = req.body;
+     
+
+    let whereClauses = [];
+    let params = [];
+    let paramIndex = 1;
+
+if (startDate) {
+  whereClauses.push(`o.created_at >= $${paramIndex++}`);
+  params.push(startDate);
+}
+if (endDate) {
+  whereClauses.push(`o.created_at < ($${paramIndex++}::date + interval '1 day')`);
+  params.push(endDate);
+}
+
+if (customers && customers.length > 0 && !(customers.length === 1 && customers[0] === "All")) {
+  const placeholders = customers.map((_, i) => `$${paramIndex + i}`).join(",");
+  whereClauses.push(`o.customer_id IN (${placeholders})`);
+  params.push(...customers.map(c => parseInt(c, 10))); // cast to int
+  paramIndex += customers.length;
+}
+
+if (status && status !== "All") {
+  whereClauses.push(`LOWER(o.status) = LOWER($${paramIndex++})`);
+  params.push(status);
+}
+
+
+    const whereSQL = whereClauses.length ? "WHERE " + whereClauses.join(" AND ") : "";
+
+    const result = await pool.query(
+      `
+      SELECT 
+        o.id AS order_id,
+        o.created_at AS order_date,
+        c.name AS customer_name,
+        c.region AS customer_region,
+        c.phone AS customer_contact,
+        COUNT(oi.product_id) AS item_count,
+        SUM(oi.quantity * oi.negotiated_price) AS order_value
+      FROM orders o
+      JOIN customers c ON o.customer_id = c.customer_id
+      JOIN order_items oi ON o.id = oi.order_id
+      ${whereSQL}
+      GROUP BY o.id, o.created_at, c.name, c.region, c.phone
+      ORDER BY o.id DESC
+      `,
+      params
+    );
+
+    const orders = result.rows;
+
+    // --- Excel workbook ---
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Order Summary");
+
+    sheet.columns = [
+      { header: "Order ID", key: "order_id", width: 12 },
+      { header: "Customer Name", key: "customer_name", width: 25 },
+      { header: "Order Date", key: "order_date", width: 20 },
+      { header: "Area", key: "customer_region", width: 20 },
+      { header: "Contact", key: "customer_contact", width: 20 },
+      { header: "Item Count", key: "item_count", width: 15, style: { numFmt: '#,##0' } },
+      { header: "Order Value", key: "order_value", width: 18, style: { numFmt: '₹#,##0' } },
+      { header: "Payment Status", key: "payment_status", width: 18 },
+    ];
+
+// Make header row bold
+sheet.getRow(1).font = { bold: true };
+
+
+    let totalItems = 0;
+    let totalValue = 0;
+
+    orders.forEach(order => {
+      totalItems += parseInt(order.item_count, 10);
+      totalValue += parseFloat(order.order_value);
+
+      sheet.addRow({
+        order_id: order.order_id,
+        customer_name: order.customer_name,
+        order_date: new Date(order.order_date).toLocaleDateString("en-IN"),
+        customer_region: order.customer_region,
+        customer_contact: order.customer_contact,
+        item_count: parseInt(order.item_count, 10),
+        order_value: Math.round(order.order_value),
+        payment_status: "" // blank
+      });
+    });
+
+    const totalRow = sheet.addRow({
+      order_id: "",
+      customer_name: "TOTAL",
+      order_date: "",
+      customer_region: "",
+      customer_contact: "",
+      item_count: totalItems,
+      order_value: totalValue,
+      payment_status: ""
+    });
+
+    totalRow.font = { bold: true };
+    totalRow.eachCell(cell => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "DDDDDD" } };
+      cell.border = { top: { style: "thick" } };
+    });
+
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=order-summary.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (err) {
+    console.error("Export error:", err);
+    res.status(500).json({ message: "Failed to export order summary" });
+  }
+});
+
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
