@@ -881,22 +881,45 @@ doc.fontSize(11).font('Helvetica-Bold');
   doc.text(header, x, tableTop, { width: colWidths[i], underline: true, align: (i > 1 ? 'right' : 'left') });
   x += colWidths[i];
 });
-
-  let y = tableTop + 20;
+let y = tableTop + 20;
 let grandTotal = 0;
+const rowHeight = 20;
+const usableHeight = doc.page.height - 100; // keep some bottom margin
+
 doc.font('Helvetica').fontSize(10);
 
 order.items.forEach((item, index) => {
   grandTotal += item.final_price;
-  const rowHeight = 20;
+
+  // Before drawing row → check for page break
+  if (y + rowHeight + 50 > usableHeight) {
+    doc.addPage();
+
+    // Draw page border again
+    doc.rect(10, 10, doc.page.width - 20, doc.page.height - 20).stroke();
+
+    // Re-draw table header
+    let headerX = startX;
+    doc.fontSize(11).font('Helvetica-Bold');
+    [
+      'Product', 'HSN', 'Qty', 'Taxable Amt', 'CGST %', 'SGST %', 'Cess %', 'Total'
+    ].forEach((header, i) => {
+      doc.text(header, headerX, 50, { width: colWidths[i], underline: true, align: (i > 0 ? 'right' : 'left') });
+      headerX += colWidths[i];
+    });
+
+    y = 70; // reset Y for new page
+    doc.font('Helvetica').fontSize(10);
+  }
 
   // Alternate row shading
   if (index % 2 === 0) {
-    doc.rect(startX, y - 2, colWidths.reduce((a, b) => a + b, 0), rowHeight).fill('#f5f5f5').fillColor('black');
+    doc.rect(startX, y - 2, colWidths.reduce((a, b) => a + b, 0), rowHeight)
+       .fill('#f5f5f5').fillColor('black');
   }
 
-  // Reset x for each row
-  x = startX;
+  // Row data
+  let x = startX;
   const rowValues = [
     item.product_name,
     item.hsn,
@@ -909,11 +932,10 @@ order.items.forEach((item, index) => {
   ];
 
   rowValues.forEach((val, i) => {
-    doc.text(val, x, y, { width: colWidths[i], align: (i > 1 ? 'right' : 'left') });
+    doc.text(val, x, y, { width: colWidths[i], align: (i > 0 ? 'right' : 'left') });
     x += colWidths[i];
   });
 
-  // Draw bottom line
   doc.moveTo(startX, y + rowHeight).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + rowHeight).stroke();
 
   y += rowHeight + 5;
