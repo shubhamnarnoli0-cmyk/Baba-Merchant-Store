@@ -869,14 +869,14 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     doc.moveDown();
 
     // Table Header
-    const colWidths = [150, 60, 40, 80, 50, 50, 50, 80]; 
+    const colWidths = [190, 40, 40, 80, 50, 50, 50, 60]; 
     // Product | HSN | Qty | Taxable Amt | CGST | SGST | Cess |Final Price
 const startX = 20;
 let x = startX;
 const tableTop = doc.y + 5;
 doc.fontSize(11).font('Helvetica-Bold');
 [
-  'Product', 'HSN', 'Qty', 'Taxable Amt', 'CGST %', 'SGST %', 'Cess %', 'Final Price'
+  'Product', 'HSN', 'Qty', 'Taxable Amt', 'CGST %', 'SGST %', 'Cess %', 'Total'
 ].forEach((header, i) => {
   doc.text(header, x, tableTop, { width: colWidths[i], underline: true, align: (i > 1 ? 'right' : 'left') });
   x += colWidths[i];
@@ -884,11 +884,11 @@ doc.fontSize(11).font('Helvetica-Bold');
 
   let y = tableTop + 20;
 let grandTotal = 0;
-doc.font('Helvetica').fontSize(10);
+doc.font('Helvetica').fontSize(11);
 
 order.items.forEach((item, index) => {
   grandTotal += item.final_price;
-  const rowHeight = 20;
+  const rowHeight = 24;
 
   // Alternate row shading
   if (index % 2 === 0) {
