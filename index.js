@@ -1745,7 +1745,8 @@ if (status && status !== "All") {
 
     const whereSQL = whereClauses.length ? "WHERE " + whereClauses.join(" AND ") : "";
 
-    const result = await pool.query(
+   
+    const { rows } = await pool.query(
       `
       SELECT 
         o.id AS order_id,
@@ -1765,9 +1766,130 @@ if (status && status !== "All") {
       params
     );
 
-    const orders = result.rows;
+    // ================= PDF Export =================
+if (format === "pdf") {
+  res.setHeader("Content-Disposition", "attachment; filename=order_summary.pdf");
+  res.setHeader("Content-Type", "application/pdf");
 
-    // --- Excel workbook ---
+  const doc = new PDFDocument({ margin: 20, size: "A4" });
+  doc.pipe(res);
+
+  // ---- helpers ----
+  const margin = doc.page.margins.left;              // 28
+  const pageW  = doc.page.width - margin * 2;        // usable width
+  const pageH  = doc.page.height - margin * 2;       // usable height
+  let y = margin;
+
+  const INR = n =>
+    `${Math.round(Number(n || 0)).toLocaleString("en-IN")}`;
+  const INT = n =>
+    Number(n || 0).toLocaleString("en-IN");
+
+  const cols = [
+    { header: "Order ID",       width: 50,  get: r => String(r.order_id || "") },
+    { header: "Customer Name",  width: 110, get: r => r.customer_name || "" },
+    { header: "Order Date",     width: 70,  get: r => new Date(r.order_date).toLocaleDateString("en-IN") },
+    { header: "Region",         width: 55,  get: r => r.customer_region || "" },
+    { header: "Contact",        width: 75,  get: r => r.customer_contact || "" },
+    { header: "Item Count",     width: 50,  get: r => INT(r.item_count), align: "right" },
+    { header: "Order Value",    width: 65,  get: r => INR(r.order_value), align: "right" },
+    { header: "Payment Status", width: 60,  get: _ => "" , align: "right"}
+  ];
+  const totalTableWidth = cols.reduce((s, c) => s + c.width, 0);
+  if (totalTableWidth > pageW) {
+    // Safety: shrink proportionally if someone later tweaks widths too wide
+    const scale = pageW / totalTableWidth;
+    cols.forEach(c => (c.width = Math.floor(c.width * scale)));
+  }
+
+  const drawRow = (row, opts = {}) => {
+    const x0 = margin;
+    let x = x0;
+    const font = opts.header ? "Helvetica-Bold" : "Helvetica";
+    doc.font(font).fontSize(10);
+
+    // compute row height = max of cell heights
+    const heights = cols.map(c =>
+      doc.heightOfString(row[c.header] ?? c.get(row), { width: c.width })
+    );
+    const h = Math.max(16, Math.max(...heights)); // min 16pt
+
+    // page break
+    if (y + h > doc.page.height - margin) {
+      doc.addPage();
+      y = margin;
+      drawHeader(); // repeat header on new page
+    }
+
+    // background for header / zebra rows if desired
+    if (opts.header) {
+      doc.save()
+        .rect(x0 - 2, y - 2, cols.reduce((s, c) => s + c.width, 0) + 4, h + 4)
+        .fill("#f0f0f0")
+        .restore();
+    }
+
+    // draw text cells
+    cols.forEach(c => {
+      const txt = row[c.header] ?? c.get(row);
+      doc.fillColor("#000").text(txt, x, y, {
+        width: c.width,
+        align: c.align || "left"
+      });
+      x += c.width;
+    });
+
+    y += h + 6; // row spacing
+  };
+
+  const drawHeader = () => {
+    const headerObj = {};
+    cols.forEach(c => (headerObj[c.header] = c.header));
+    drawRow(headerObj, { header: true });
+  };
+
+  // ---- Title ----
+  doc.fontSize(16).text("Order Summary", { align: "center" });
+  y = doc.y + 8;
+
+  // ---- Header ----
+  drawHeader();
+
+  // ---- Data rows ----
+  let totalItems = 0;
+  let totalValue = 0;
+
+  rows.forEach(r => {
+    totalItems += Number(r.item_count || 0);
+    totalValue += Number(r.order_value || 0);
+    drawRow(r);
+  });
+
+  // ---- Total row ----
+  const totalRow = {};
+  cols.forEach(c => (totalRow[c.header] = "")); // init
+  totalRow["Customer Name"] = "TOTAL";
+  totalRow["Item Count"]    = INT(totalItems);
+  totalRow["Order Value"]   = INR(totalValue);
+
+  // emphasize total
+  const oldY = y;
+  drawRow(totalRow);
+  doc.save()
+     .rect(margin - 2, oldY - 2, cols.reduce((s, c) => s + c.width, 0) + 4, 22)
+     .fillOpacity(0.15)
+     .fill("#cccccc")
+     .restore();
+  // redraw total text on top to stay crisp
+  y = oldY;
+  drawRow(totalRow);
+
+  doc.end();
+  return;
+}
+
+
+    // ================= Excel Export =================
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Order Summary");
 
@@ -1782,14 +1904,13 @@ if (status && status !== "All") {
       { header: "Payment Status", key: "payment_status", width: 18 },
     ];
 
-// Make header row bold
-sheet.getRow(1).font = { bold: true };
-
+    // Make header row bold
+    sheet.getRow(1).font = { bold: true };
 
     let totalItems = 0;
     let totalValue = 0;
 
-    orders.forEach(order => {
+    rows.forEach(order => {
       totalItems += parseInt(order.item_count, 10);
       totalValue += parseFloat(order.order_value);
 
@@ -1812,7 +1933,7 @@ sheet.getRow(1).font = { bold: true };
       customer_region: "",
       customer_contact: "",
       item_count: totalItems,
-      order_value: totalValue,
+      order_value: Math.round(totalValue),
       payment_status: ""
     });
 
@@ -1839,6 +1960,7 @@ sheet.getRow(1).font = { bold: true };
     res.status(500).json({ message: "Failed to export order summary" });
   }
 });
+
 
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
