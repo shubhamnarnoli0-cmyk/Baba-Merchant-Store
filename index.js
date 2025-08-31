@@ -869,33 +869,54 @@ app.get('/api/admin/orders/:id/invoice', async (req, res) => {
     doc.moveDown();
 
     // Table Header
-    const colWidths = [150, 60, 40, 80, 50, 50, 50, 80]; 
-    // Product | HSN | Qty | Taxable Amt | CGST | SGST | Cess |Final Price
-const startX = 20;
+
+const pageWidth = doc.page.width;
+const marginLeft = 20;
+const marginRight = 20;
+const usableWidth = pageWidth - marginLeft - marginRight; // e.g. 555
+const startX = marginLeft; // always start at 20
+
+// Updated column widths
+const rawColWidths = [180, 60, 40, 80, 45, 45, 45, 60];
+const rawTotal = rawColWidths.reduce((a, b) => a + b, 0);
+
+// scale proportionally to fit usable width
+const colWidths = rawColWidths.map(w => (w / rawTotal) * usableWidth);
+
+ 
+// Product | HSN | Qty | Taxable Amt | CGST | SGST | Cess | Final Price
 let x = startX;
 const tableTop = doc.y + 5;
+
+// Table Header
 doc.fontSize(11).font('Helvetica-Bold');
 [
   'Product', 'HSN', 'Qty', 'Taxable Amt', 'CGST %', 'SGST %', 'Cess %', 'Total'
 ].forEach((header, i) => {
-  doc.text(header, x, tableTop, { width: colWidths[i], underline: true, align: (i > 1 ? 'right' : 'left') });
+  doc.text(header, x, tableTop, { 
+    width: colWidths[i], 
+    underline: true, 
+    align: (i > 1 ? 'right' : 'left') 
+  });
   x += colWidths[i];
 });
-let y = tableTop + 20;
-let grandTotal = 0;
-const rowHeight = 20;
-const usableHeight = doc.page.height - 100; // keep some bottom margin
 
-doc.font('Helvetica').fontSize(10);
+let y = tableTop + 22;
+let grandTotal = 0;
+const rowHeight = 24;
+const usableHeight = doc.page.height - 100; // bottom margin
+
+// Product line items
+doc.font('Helvetica').fontSize(12);
 
 order.items.forEach((item, index) => {
   grandTotal += item.final_price;
 
-  // Before drawing row → check for page break
+  // Page break check
   if (y + rowHeight + 50 > usableHeight) {
     doc.addPage();
 
-    // Draw page border again
+    // Draw border
     doc.rect(10, 10, doc.page.width - 20, doc.page.height - 20).stroke();
 
     // Re-draw table header
@@ -904,22 +925,27 @@ order.items.forEach((item, index) => {
     [
       'Product', 'HSN', 'Qty', 'Taxable Amt', 'CGST %', 'SGST %', 'Cess %', 'Total'
     ].forEach((header, i) => {
-      doc.text(header, headerX, 50, { width: colWidths[i], underline: true, align: (i > 0 ? 'right' : 'left') });
+      doc.text(header, headerX, 50, { 
+        width: colWidths[i], 
+        underline: true, 
+        align: (i > 1 ? 'right' : 'left') 
+      });
       headerX += colWidths[i];
     });
 
-    y = 70; // reset Y for new page
-    doc.font('Helvetica').fontSize(10);
+    y = 72; // reset Y for new page
+    doc.font('Helvetica').fontSize(12);
   }
 
   // Alternate row shading
   if (index % 2 === 0) {
     doc.rect(startX, y - 2, colWidths.reduce((a, b) => a + b, 0), rowHeight)
-       .fill('#f5f5f5').fillColor('black');
+       .fill('#f5f5f5')
+       .fillColor('black');
   }
 
-  // Row data
-  let x = startX;
+  // Row values
+  let rowX = startX;
   const rowValues = [
     item.product_name,
     item.hsn,
@@ -932,23 +958,35 @@ order.items.forEach((item, index) => {
   ];
 
   rowValues.forEach((val, i) => {
-    doc.text(val, x, y, { width: colWidths[i], align: (i > 0 ? 'right' : 'left') });
-    x += colWidths[i];
+    doc.text(val, rowX, y, { 
+      width: colWidths[i], 
+      align: (i > 0 ? 'right' : 'left') 
+    });
+    rowX += colWidths[i];
   });
 
-  doc.moveTo(startX, y + rowHeight).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + rowHeight).stroke();
+  // Row bottom border
+  doc.moveTo(startX, y + rowHeight)
+     .lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + rowHeight)
+     .stroke();
 
   y += rowHeight + 5;
 });
 
 // Grand Total
-doc.moveTo(startX, y + 5).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + 5).stroke();
-doc.font('Helvetica-Bold').text('Grand Total:', startX + 400, y + 10, { width: 100, align: 'right' });
-const roundedTotal = Math.round(grandTotal); 
-// Format grand total in Indian currency
-const formattedGrandTotal = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2}).format(roundedTotal);
+const totalColStart = startX + colWidths.slice(0, 7).reduce((a, b) => a + b, 0);
+doc.moveTo(startX, y + 5)
+   .lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y + 5)
+   .stroke();
 
-doc.text(formattedGrandTotal, startX + 480, y + 10, { width: 80, align: 'right' });
+doc.font('Helvetica-Bold')
+   .fontSize(12)
+   .text('Grand Total:', totalColStart - 100, y + 10, { width: 100, align: 'right' });
+
+const roundedTotal = Math.round(grandTotal);
+const formattedGrandTotal = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2 }).format(roundedTotal);
+
+doc.text(formattedGrandTotal, totalColStart, y + 10, { width: colWidths[7], align: 'right' });
 
 
     doc.end();
