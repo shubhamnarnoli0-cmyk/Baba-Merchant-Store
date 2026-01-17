@@ -18,7 +18,8 @@ const allowedOrigins = [
   'http://10.0.2.2:3001',
   'http://10.0.2.2:8080',
   'https://baba-merchant-frontend.onrender.com',
-  'https://merchant-admin-react-dashboard.onrender.com'
+  'https://merchant-admin-react-dashboard.onrender.com',
+'https://merchant-admin-dashboard-steel.vercel.app'
 ];
 const ExcelJS = require("exceljs");
 app.use(cookieParser()); // if not already present
