@@ -5,7 +5,7 @@ require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 8080;
 const path = require('path');
 
 
@@ -192,8 +192,8 @@ app.get('/api/order-history', async (req, res) => {
 
 
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
 // Get full order history with customer info and item names
