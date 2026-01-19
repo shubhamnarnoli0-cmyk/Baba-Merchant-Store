@@ -225,90 +225,94 @@ app.get('/api/orders', async (req, res) => {
 });
 
 app.get('/api/admin/orders', async (req, res) => {
-  const { customer_ids, status, start_date, end_date } = req.query;
+  const client = await pool.connect();
+
   try {
-    const client = await pool.connect();
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+    const offset = (page - 1) * limit;
 
-    let query = `
-      SELECT 
+    const query = `
+      SELECT
         o.id AS order_id,
-        o.customer_id,
-        c.name AS customer_name,
         o.created_at,
+        o.status,
         o.notes,
-        o.status
+        c.name AS customer_name,
+
+        oi.id AS order_item_id,
+        oi.product_id,
+        p.name AS product_name,
+        oi.quantity,
+        oi.unit_price,
+        oi.negotiated_price,
+        p.base_price
+
       FROM orders o
-      JOIN customers c ON o.customer_id = c.customer_id
+      JOIN customers c ON c.customer_id = o.customer_id
+      LEFT JOIN order_items oi ON oi.order_id = o.id
+      LEFT JOIN products p ON p.id = oi.product_id
+
+      ORDER BY o.created_at DESC
+      LIMIT $1 OFFSET $2
     `;
-    const conditions = [];
-    const values = [];
 
-    // Add filter for customer_ids (comma-separated string)
-    if (customer_ids) {
-      const ids = customer_ids.split(',');
-      conditions.push(`o.customer_id = ANY($${values.length + 1})`);
-      values.push(ids);
+    const { rows } = await client.query(query, [limit, offset]);
+
+    const ordersMap = new Map();
+    console.log('Rows returned:', rows.length);
+console.log('Sample row:', rows[0]);
+
+    for (const row of rows) {
+      if (!ordersMap.has(row.order_id)) {
+        ordersMap.set(row.order_id, {
+          order_id: row.order_id,
+          customer_name: row.customer_name,
+          created_at: row.created_at,
+          status: row.status,
+          notes: row.notes,
+          items: [],
+          total_value: 0
+        });
+      }
+
+      if (row.order_item_id) {
+        const order = ordersMap.get(row.order_id);
+
+        const item = {
+          order_item_id: row.order_item_id,
+          product_id: row.product_id,
+          product_name: row.product_name,
+          quantity: Number(row.quantity),
+          unit_price: Number(row.unit_price),
+          negotiated_price: Number(row.negotiated_price),
+          base_price: Number(row.base_price)
+        };
+
+        order.items.push(item);
+        order.total_value += item.quantity * item.negotiated_price;
+      }
     }
 
-    // Add filter for status
-    if (status) {
-      conditions.push(`o.status = $${values.length + 1}`);
-      values.push(status);
-    }
-if (start_date) {
-  values.push(start_date);
-  conditions.push(`o.created_at >= $${values.length}`);
-}
+const result = Array.from(ordersMap.values());
 
-if (end_date) {
-  values.push(end_date);
-  conditions.push(`o.created_at <= ($${values.length}::date + interval '1 day')`);
-}
+console.log('Final orders payload:', result.length);
+console.log('First order:', result[0]);
 
-    if (conditions.length > 0) {
-      query += " WHERE " + conditions.join(" AND ");
-    }
-
-    query += " ORDER BY o.created_at DESC";
-
-    const orderResult = await client.query(query, values);
-
-    const orders = [];
-
-    for (let order of orderResult.rows) {
-      const itemsResult = await client.query(`
-        SELECT 
-          oi.id AS order_item_id,
-          p.name AS product_name,
-          oi.quantity,
-          oi.unit_price,
-          oi.negotiated_price,
-          p.base_price
-        FROM order_items oi
-        JOIN products p ON oi.product_id = p.id
-        WHERE oi.order_id = $1
-      `, [order.order_id]);
-
-      const total_value = itemsResult.rows.reduce(
-        (sum, item) => sum + item.negotiated_price * item.quantity,
-        0
-      );
-
-      orders.push({
-        ...order,
-        items: itemsResult.rows,
-        total_value
-      });
-    }
-
-    client.release();
-    res.json(orders);
-  } catch (err) {
-    console.error("Error fetching admin orders:", err);
-    res.status(500).json({ error: "Failed to fetch orders" });
-  }
+res.json({
+  page,
+  limit,
+  orders: result
 });
 
+
+  } catch (err) {
+    console.error('Orders fetch failed:', err);
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  } finally {
+    client.release();
+  }
+});
 // PATCH negotiated_price for a specific order item
 app.patch("/api/admin/orders/:orderId/items/:productId", async (req, res) => {
   const { orderId, productId } = req.params;
