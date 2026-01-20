@@ -226,13 +226,18 @@ app.get('/api/orders', async (req, res) => {
 
 app.get('/api/admin/orders', async (req, res) => {
   const client = await pool.connect();
-
   try {
-    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
-    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
-    const offset = (page - 1) * limit;
+    const limit = Math.min(parseInt(req.query.limit || '10', 10), 50);
+    const cursor = req.query.cursor ? Number(req.query.cursor) : null;
 
     const query = `
+      WITH order_page AS (
+        SELECT o.id
+        FROM orders o
+        ${cursor ? 'WHERE o.id < $2' : ''}
+        ORDER BY o.id DESC
+        LIMIT $1
+      )
       SELECT
         o.id AS order_id,
         o.created_at,
@@ -248,20 +253,19 @@ app.get('/api/admin/orders', async (req, res) => {
         oi.negotiated_price,
         p.base_price
 
-      FROM orders o
+      FROM order_page op
+      JOIN orders o ON o.id = op.id
       JOIN customers c ON c.customer_id = o.customer_id
       LEFT JOIN order_items oi ON oi.order_id = o.id
       LEFT JOIN products p ON p.id = oi.product_id
 
-      ORDER BY o.created_at DESC
-      LIMIT $1 OFFSET $2
+      ORDER BY o.id DESC
     `;
 
-    const { rows } = await client.query(query, [limit, offset]);
+    const params = cursor ? [limit, cursor] : [limit];
+    const { rows } = await client.query(query, params);
 
     const ordersMap = new Map();
-    console.log('Rows returned:', rows.length);
-console.log('Sample row:', rows[0]);
 
     for (const row of rows) {
       if (!ordersMap.has(row.order_id)) {
@@ -278,7 +282,6 @@ console.log('Sample row:', rows[0]);
 
       if (row.order_item_id) {
         const order = ordersMap.get(row.order_id);
-
         const item = {
           order_item_id: row.order_item_id,
           product_id: row.product_id,
@@ -288,24 +291,19 @@ console.log('Sample row:', rows[0]);
           negotiated_price: Number(row.negotiated_price),
           base_price: Number(row.base_price)
         };
-
         order.items.push(item);
         order.total_value += item.quantity * item.negotiated_price;
       }
     }
 
-const result = Array.from(ordersMap.values());
+    const orders = Array.from(ordersMap.values());
 
-console.log('Final orders payload:', result.length);
-console.log('First order:', result[0]);
-
-res.json({
-  page,
-  limit,
-  orders: result
-});
-
-
+    res.json({
+      orders,
+      nextCursor: orders.length
+        ? orders[orders.length - 1].order_id
+        : null
+    });
   } catch (err) {
     console.error('Orders fetch failed:', err);
     res.status(500).json({ error: 'Failed to fetch orders' });
@@ -313,6 +311,7 @@ res.json({
     client.release();
   }
 });
+
 // PATCH negotiated_price for a specific order item
 app.patch("/api/admin/orders/:orderId/items/:productId", async (req, res) => {
   const { orderId, productId } = req.params;
